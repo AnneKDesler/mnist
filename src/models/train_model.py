@@ -75,7 +75,7 @@ def train(lr):
         losses_test.append(loss/len(testloader))
         accuracys.append(accuracy/len(testloader))
 
-    torch.save(model, 'src/models/checkpoints/checkpoint.pth')
+    torch.save(model, 'models/checkpoints/checkpoint.pth')
     fig = plt.figure()
     plt.plot(losses_train)
     plt.ylabel('Train loss')
