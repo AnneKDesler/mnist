@@ -1,0 +1,5 @@
+#config.yaml
+hyperparameters:
+  batch_size: 1000
+  lr: 1e-2
+  epochs: 5

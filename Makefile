@@ -80,7 +80,10 @@ test_environment:
 # PROJECT RULES                                                                 #
 #################################################################################
 train: data
-	$(PYTHON_INTERPRETER) src/models/train_model.py train
+	$(PYTHON_INTERPRETER) src/models/train_model.py
+
+test: data
+	$(PYTHON_INTERPRETER) src/models/predict_model.py
 
 
 #################################################################################

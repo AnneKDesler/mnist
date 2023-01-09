@@ -9,16 +9,11 @@ from torch import nn, optim
 import matplotlib.pyplot as plt
 import numpy as np
 
-@click.group()
-def cli():
-    pass
+import wandb
+from omegaconf import OmegaConf
 
-
-@click.command()
-@click.option("--lr", default=1e-3, help='learning rate to use for training')
-def train(lr):
+def train(cfg):
     print("Training day and night")
-    print(lr)
 
     # TODO: Implement training loop here
     model = MyAwesomeModel()
@@ -28,15 +23,20 @@ def train(lr):
         train_sets.append(torch.utils.data.TensorDataset(torch.tensor(train["images"]).float(), torch.tensor(train["labels"])))
         
     
-    test = np.load("data/processed/" + "test.npz")
+    test = np.load("data/processed/test.npz")
     
+    hyps = cfg.hyperparameters
+    lr = hyps.lr
+    batch_size = hyps.batch_size
+    epochs = hyps.epochs
+
     test_set = torch.utils.data.TensorDataset(torch.tensor(test["images"]).float(), torch.tensor(test["labels"]))
     train_set = torch.utils.data.ConcatDataset(train_sets)
-    trainloader = torch.utils.data.DataLoader(train_set, batch_size=1000, shuffle=True)
-    testloader = torch.utils.data.DataLoader(test_set, batch_size=1000, shuffle=True)
+    trainloader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    testloader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True)
 
-    epochs = 10
-    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+    
+    optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.NLLLoss()
     steps = 0
     running_loss = 0
@@ -44,6 +44,11 @@ def train(lr):
     losses_train = []
     losses_test = []
     accuracys = []
+
+    wandb.init(config=cfg)
+
+    wandb.watch(model, log_freq=100)
+
     for e in range(epochs):
         # Model in training mode, dropout is on
         model.train()
@@ -58,12 +63,14 @@ def train(lr):
             optimizer.step()
             
             losses_train.append(loss.item())
+            wandb.log({"train loss": loss.item()})
         accuracy = 0
         loss = 0
         for images, labels in testloader:
             
             output = model(images)
-            loss += criterion(output, labels).item()
+            loss_i = criterion(output, labels).item()
+            loss += loss_i
 
             ## Calculating the accuracy 
             # Model's output is log-softmax, take exponential to get the probabilities
@@ -71,7 +78,11 @@ def train(lr):
             # Class with highest probability is our predicted class, compare with true label
             equality = (labels.data == ps.max(1)[1])
             # Accuracy is number of correct predictions divided by all predictions, just take the mean
-            accuracy += equality.type_as(torch.FloatTensor()).mean()
+            accuracy_i = equality.type_as(torch.FloatTensor()).mean()
+            accuracy += accuracy_i
+            wandb.log({"test loss": loss_i})
+            wandb.log({"accuracy": accuracy_i})
+
         losses_test.append(loss/len(testloader))
         accuracys.append(accuracy/len(testloader))
 
@@ -99,35 +110,9 @@ def train(lr):
 
 
 
-@click.command()
-@click.argument("model_checkpoint")
-def evaluate(model_checkpoint):
-    print("Evaluating until hitting the ceiling")
-    print(model_checkpoint)
-
-    # TODO: Implement evaluation logic here
-    model = torch.load(model_checkpoint)
-    test_set = np.load("data/processed/test_data.npz")
-    accuracy = 0
-    for images, labels in test_set:
-        
-        output = model(images)
-
-        ## Calculating the accuracy 
-        # Model's output is log-softmax, take exponential to get the probabilities
-        ps = torch.exp(output)
-        # Class with highest probability is our predicted class, compare with true label
-        equality = (labels.data == ps.max(1)[1])
-        # Accuracy is number of correct predictions divided by all predictions, just take the mean
-        accuracy += equality.type_as(torch.FloatTensor()).mean()
-
-    accuracy /= len(test_set)
-    print(accuracy.item())
-
-
-cli.add_command(train)
-cli.add_command(evaluate)
-
-
 if __name__ == "__main__":
-    cli()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='config.yaml', help = 'config file path')
+    args =parser.parse_args()
+    cfg = OmegaConf.load(args.config)
+    train(cfg)
